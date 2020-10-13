@@ -1,0 +1,1 @@
+nohup hypnotoad cpu.pl > cpu.log &
