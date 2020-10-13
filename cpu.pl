@@ -7,7 +7,7 @@ use common::sense;
 use Proc::ProcessTable;
 use Time::HiRes;
 
-die('Want WSCPU_IP at /etc/enviroment') unless exists $ENV{WSCPU_IP};
+die('Want WSCPU_IP at /etc/environment') unless exists $ENV{WSCPU_IP};
 
 app->config( hypnotoad => { listen => ['http://'.$ENV{WSCPU_IP}.':3000'] } );
 
