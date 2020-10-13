@@ -6,6 +6,7 @@ use Mojolicious::Lite;
 use common::sense;
 use Proc::ProcessTable;
 use Time::HiRes;
+use Parse::Netstat qw(parse_netstat);
 
 die('Want WSCPU_IP at /etc/environment') unless $ENV{'WSCPU_IP'};
 
@@ -68,30 +69,27 @@ helper 'get_w' => sub {
 helper 'get_process' => sub {
     my $h = {};
     my $str;
-
     my $t = Proc::ProcessTable->new;
-
     foreach my $p ( @{ $t->table } ) {
         if ( $p->pctcpu > 0 && $p->cmndline ) {
             $h->{ $p->cmndline } += $p->pctcpu if $p->pctcpu ne 'Inf';
         }
     }
     my $i;
-
     foreach my $key ( sort { $h->{$b} <=> $h->{$a} } keys %{$h} ) {
         $i++;
         $str .= "<tr><td>$i</td><td>$key</td><td>" . $h->{$key} . "%</td><tr>" if $h->{$key} ne 'Inf';
     }
-
     return $str;
 };
 
 helper 'get_net' => sub {
-    my $str = `netstat -ntu | sort -rn | grep -v 127.0.0.1 | grep -v 3000 |grep -v Proto |grep -v Active |sort`;
-    $str =~ s/^ {2,}/<tr><td>/mg;
-    $str =~ s/\n/<\/td><\/tr>/mg;
-    $str =~ s/ {2,}/<\/td><td>/mg;
+    my $str = '';
+    my $res = parse_netstat( output => join("", `netstat -nalt4`), flavor=>'linux' );
+    $str .= '<tr><td>'.$_->{foreign_host}.'</td><td>'.$_->{foreign_port}.'</td><td>'.$_->{local_host}.'</td><td>'.$_->{local_port}.'</td></tr>' foreach( @{@$res[2]->{active_conns}} );
+
     return "<table id=net_tbl width=100%>$str</table>";
+
 };
 
 helper 'get_net_ip' => sub {
@@ -99,7 +97,10 @@ helper 'get_net_ip' => sub {
     my $str;
     foreach (@b) {
     my ($l, $r) = split(" ", $_);
-        $str .= "<tr><td>$l</td> <td>$r</td></tr>" if $l and $r;
+        $str .= "<tr>
+		<td>$l</td>
+		<td>$r</td>
+		</tr>" if $l and $r;
     }
     return "<br><b>Total ips: " . scalar @b . "</b><br><table id=net_tbl_ip width=100%>$str</table><br>";
 };
@@ -199,7 +200,7 @@ __DATA__
 
             var net          = new WebSocket('ws://'+IP+':3000/stream/net');            // netstat    / 2 sec
             net.onmessage    = function  (ev) { html_ev('net', ev.data ); };
-            net.onerror      = function(error) { alert('WebSocket Error: ' + error); };
+           net.onerror      = function(error) { alert('WebSocket Error: ' + error); };
 
             var net_ip       = new WebSocket('ws://'+IP+':3000/stream/net_ip');            // netstat    / 2 sec
             net_ip.onmessage = function  (ev) { html_ev('net_ip', ev.data ); };
