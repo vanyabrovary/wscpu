@@ -7,7 +7,7 @@ use common::sense;
 use Proc::ProcessTable;
 use Time::HiRes;
 
-die('Want WSCPU_IP at /etc/environment') unless exists $ENV{WSCPU_IP};
+die('Want WSCPU_IP at /etc/environment') unless $ENV{'WSCPU_IP'};
 
 app->config( hypnotoad => { listen => ['http://'.$ENV{WSCPU_IP}.':3000'] } );
 
@@ -30,35 +30,32 @@ my %idle_before;
 my %total_after;
 my %total_before;
 my @f;
+open(STAT, "< /proc/stat");
 
+while(<STAT>) { if (/^cpu(\d+)/) { $cpu = $1; @f = split; $idle_before{$cpu} = $f[4]; $total_before{$cpu} = $f[1] + $f[2] + $f[3] + $f[4] + $f[5] + $f[6] + $f[7] + $f[8] +  $f[9]; }}
+close(STAT);
 
-    open(STAT, "< /proc/stat");
+Time::HiRes::sleep(0.8);
 
-    while(<STAT>) { if (/^cpu(\d+)/) { $cpu = $1; @f = split; $idle_before{$cpu} = $f[4]; $total_before{$cpu} = $f[1] + $f[2] + $f[3] + $f[4] + $f[5] + $f[6] + $f[7] + $f[8] +  $f[9]; }}
-    close(STAT);
+open(STAT, "< /proc/stat") or die;
 
-    Time::HiRes::sleep(0.6);
+while(<STAT>) { if (/^cpu(\d+)/) {
+$cpu = $1; @f = split; $idle_after{$cpu} = $f[4];
+$total_after{$cpu} = $f[1] + $f[2] + $f[3] + $f[4] + $f[5] + $f[6] + $f[7] + $f[8] +  $f[9];
+} }
 
-    open(STAT, "< /proc/stat") or die;
-
-    while(<STAT>) { if (/^cpu(\d+)/) {
-    $cpu = $1; @f = split; $idle_after{$cpu} = $f[4];
-        $total_after{$cpu} = $f[1] + $f[2] + $f[3] + $f[4] + $f[5] + $f[6] + $f[7] + $f[8] +  $f[9];
-    } }
-
-    close(STAT) or die;
-
-    for($i=0; $i <= $cpu; $i++) {
-        $total = $total_after{$i} - $total_before{$i};
-        $idle  = $idle_after{$i} - $idle_before{$i};
-        if ($total == 0) { $percent_busy = 0; } else { $percent_busy = ($total - $idle) * 100 / $total; }
-        $show_idle  = 100 - int($percent_busy);
-        $show_usage = 101 - $show_idle;
-        $ic = $i + 1;
+close(STAT) or die;
+for($i=0; $i <= $cpu; $i++) {
+    $total = $total_after{$i} - $total_before{$i};
+    $idle  = $idle_after{$i} - $idle_before{$i};
+    if ($total == 0) { $percent_busy = 0; } else { $percent_busy = ($total - $idle) * 100 / $total; }
+    $show_idle  = 100 - int($percent_busy);
+    $show_usage = 101 - $show_idle;
+    $ic = $i + 1;
     $str .= "$ic:$show_usage";
-        $str .= "," if $ic < 12;
-    }
-    return $str;
+    $str .= "," if $ic < 12;
+}
+return $str;
 };
 
 
@@ -94,7 +91,6 @@ helper 'get_net' => sub {
     $str =~ s/^ {2,}/<tr><td>/mg;
     $str =~ s/\n/<\/td><\/tr>/mg;
     $str =~ s/ {2,}/<\/td><td>/mg;
-    $str =~ s/tcp[64]//g;
     return "<table id=net_tbl width=100%>$str</table>";
 };
 
@@ -113,7 +109,7 @@ websocket '/p' => sub {
     my $ws = $c->tx;
     $IO->stream( $c->tx->connection )->timeout(300);
     $c->on( finish => sub { $c->app->log->debug('Close'); } );
-    $IO->recurring( 0.8 => sub { $ws->send( $c->iostat() ); } );
+    $IO->recurring( 0.9 => sub { $ws->send( $c->iostat() ); } );
 };
 
 websocket '/stream/net' => sub {
@@ -194,8 +190,9 @@ __DATA__
         }
     </style>
     <script type="text/javascript">
+	var IP = '<%= $ENV{WSCPU_IP} %>';
         $(document).ready(function(){
-	    var IP = '<%= $ENV{WSCPU_IP} %>';
+	    
             var pnet          = new WebSocket('ws://'+IP+':3000/p');
             pnet.onmessage    = function  (ev)  { html_p('p', ev.data ); };
             pnet.onerror      = function(error) { alert('WebSocket Error: ' + error); };
@@ -215,9 +212,11 @@ __DATA__
         });
 
         setInterval(function() {
-            $.get( 'http://'+IP+':3000/stream/get_process', function( data ) { 
+
+            $.get( 'http://'+IP+':3000/stream/get_process', function( data ) {
                 html_ev('process',data); 
             });
+
         }, 1000);
 
 	var cpus_cont = 0;
